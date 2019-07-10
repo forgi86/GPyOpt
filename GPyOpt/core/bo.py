@@ -45,6 +45,10 @@ class BO(object):
         self.model_update_interval = model_update_interval
         self.X = X_init
         self.Y = Y_init
+        self.time_f_eval = np.zeros((0,1))
+        self.time_fit_GP = np.zeros((0,1))
+        self.time_opt_acq = np.zeros((0,1))
+        self.time_iter = np.zeros((0,1))
         self.cost = CostModel(cost)
         self.normalization_type = 'stats' ## not added in the API
         self.de_duplication = de_duplication
@@ -117,11 +121,22 @@ class BO(object):
             self.max_iter = max_iter
             self.max_time = max_time
 
-        # --- Initial function evaluation and model fitting
-        if self.X is not None and self.Y is None:
-            self.Y, cost_values = self.objective.evaluate(self.X)
-            if self.cost.cost_type == 'evaluation_time':
-                self.cost.update_cost_model(self.X, cost_values)
+
+        if self.X is not None:
+            init_count = self.X.shape[0]
+            time_vec_shape = (init_count,1)
+            self.time_fit_GP = np.zeros(time_vec_shape)
+            self.time_opt_acq = np.zeros(time_vec_shape)
+            self.time_iter = np.zeros(time_vec_shape)
+            # -- If only X_init is given, compute also Y_init and save the computational time
+            if self.Y is None:
+                self.Y, cost_values = self.objective.evaluate(self.X)  # TODO MF: save cost_values somewhere
+                self.time_f_eval = np.vstack((self.time_f_eval, np.array(cost_values).reshape(-1, 1)))
+                if self.cost.cost_type == 'evaluation_time':
+                    self.cost.update_cost_model(self.X, cost_values)
+            # -- If both X_init and Y_init are given, fill initial function eval time vector with zeros
+            else:
+                self.time_f_eval = np.zeros(time_vec_shape)
 
         # --- Initialize iterations and running time
         self.time_zero = time.time()
@@ -132,7 +147,11 @@ class BO(object):
 
         # --- Initialize time cost of the evaluations
         while (self.max_time > self.cum_time):
+
+            time_iter_start = time.time()
+
             # --- Update model
+            time_iter_fit_GP_start = time.time()
             try:
                 self._update_model(self.normalization_type)
             except np.linalg.linalg.LinAlgError:
@@ -141,14 +160,23 @@ class BO(object):
             if (self.num_acquisitions >= self.max_iter
                     or (len(self.X) > 1 and self._distance_last_evaluations() <= self.eps)):
                 break
+            time_iter_fit_GP = np.array(time.time() - time_iter_fit_GP_start)
+            self.time_fit_GP = np.vstack((self.time_fit_GP, time_iter_fit_GP.reshape(-1,1)))
 
+            # optimize acquisition funtion and save required time
+            time_acq_opt_iter_start = time.time()
             self.suggested_sample = self._compute_next_evaluations()
+            time_acq_opt = np.array(time.time() - time_acq_opt_iter_start)
+            self.time_opt_acq = np.vstack((self.time_opt_acq, time_acq_opt.reshape(-1, 1)))
 
             # --- Augment X
             self.X = np.vstack((self.X,self.suggested_sample))
 
             # --- Evaluate *f* in X, augment Y and update cost function (if needed)
-            self.evaluate_objective()
+            time_f_eval_iter_start = time.time()
+            self.evaluate_objective() # TODO MF compute required time
+            time_f_eval_iter = np.array(time.time() - time_f_eval_iter_start)
+            self.time_f_eval = np.vstack((self.time_f_eval, time_f_eval_iter.reshape(-1, 1)))
 
             # --- Update current evaluation time and function evaluations
             self.cum_time = time.time() - self.time_zero
@@ -157,6 +185,9 @@ class BO(object):
             if verbosity:
                 print("num acquisition: {}, time elapsed: {:.2f}s".format(
                     self.num_acquisitions, self.cum_time))
+
+            time_iter = np.array(time.time() - time_iter_start)
+            self.time_iter = np.vstack((self.time_iter, time_iter.reshape(-1, 1)))
 
         # --- Stop messages and execution time
         self._compute_results()
@@ -197,6 +228,7 @@ class BO(object):
         self.Y_new, cost_new = self.objective.evaluate(self.suggested_sample)
         self.cost.update_cost_model(self.suggested_sample, cost_new)
         self.Y = np.vstack((self.Y,self.Y_new))
+
 
     def _compute_results(self):
         """
