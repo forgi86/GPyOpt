@@ -127,16 +127,18 @@ class BO(object):
             time_vec_shape = (init_count,1)
             self.time_fit_GP = np.zeros(time_vec_shape)
             self.time_opt_acq = np.zeros(time_vec_shape)
-            self.time_iter = np.zeros(time_vec_shape)
+
             # -- If only X_init is given, compute also Y_init and save the computational time
             if self.Y is None:
                 self.Y, cost_values = self.objective.evaluate(self.X)  # TODO MF: save cost_values somewhere
                 self.time_f_eval = np.vstack((self.time_f_eval, np.array(cost_values).reshape(-1, 1)))
+                self.time_iter = np.vstack((self.time_iter, np.array(cost_values).reshape(-1, 1)))
                 if self.cost.cost_type == 'evaluation_time':
                     self.cost.update_cost_model(self.X, cost_values)
             # -- If both X_init and Y_init are given, fill initial function eval time vector with zeros
             else:
                 self.time_f_eval = np.zeros(time_vec_shape)
+                self.time_iter = np.zeros(time_vec_shape)
 
         # --- Initialize iterations and running time
         self.time_zero = time.time()
@@ -226,7 +228,9 @@ class BO(object):
         Evaluates the objective
         """
         self.Y_new, cost_new = self.objective.evaluate(self.suggested_sample)
-        self.cost.update_cost_model(self.suggested_sample, cost_new)
+        if self.cost.cost_type == 'evaluation_time':
+            self.cost.update_cost_model(self.suggested_sample, cost_new)
+
         self.Y = np.vstack((self.Y,self.Y_new))
 
 
