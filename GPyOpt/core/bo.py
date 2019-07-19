@@ -46,8 +46,8 @@ class BO(object):
         self.X = X_init
         self.Y = Y_init
         self.time_f_eval = np.zeros((0,1))
-        self.time_fit_GP = np.zeros((0,1))
-        self.time_opt_acq = np.zeros((0,1))
+        self.time_fit_surrogate = np.zeros((0, 1))
+        self.time_opt_acquisition = np.zeros((0, 1))
         self.time_iter = np.zeros((0,1))
         self.cost = CostModel(cost)
         self.normalization_type = 'stats' ## not added in the API
@@ -125,8 +125,8 @@ class BO(object):
         if self.X is not None:
             init_count = self.X.shape[0]
             time_vec_shape = (init_count,1)
-            self.time_fit_GP = np.zeros(time_vec_shape)
-            self.time_opt_acq = np.zeros(time_vec_shape)
+            self.time_fit_surrogate = np.zeros(time_vec_shape)
+            self.time_opt_acquisition = np.zeros(time_vec_shape)
 
             # -- If only X_init is given, compute also Y_init and save the computational time
             if self.Y is None:
@@ -163,13 +163,13 @@ class BO(object):
                     or (len(self.X) > 1 and self._distance_last_evaluations() <= self.eps)):
                 break
             time_iter_fit_GP = np.array(time.time() - time_iter_fit_GP_start)
-            self.time_fit_GP = np.vstack((self.time_fit_GP, time_iter_fit_GP.reshape(-1,1)))
+            self.time_fit_surrogate = np.vstack((self.time_fit_surrogate, time_iter_fit_GP.reshape(-1, 1)))
 
             # optimize acquisition funtion and save required time
             time_acq_opt_iter_start = time.time()
             self.suggested_sample = self._compute_next_evaluations()
             time_acq_opt = np.array(time.time() - time_acq_opt_iter_start)
-            self.time_opt_acq = np.vstack((self.time_opt_acq, time_acq_opt.reshape(-1, 1)))
+            self.time_opt_acquisition = np.vstack((self.time_opt_acquisition, time_acq_opt.reshape(-1, 1)))
 
             # --- Augment X
             self.X = np.vstack((self.X,self.suggested_sample))
